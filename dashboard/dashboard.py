@@ -330,12 +330,36 @@ if st.button("🧮 Run Prediction"):
         res = requests.post(f"{BACKEND_URL}/predict", json={"features": input_values})
         if res.status_code == 200:
             data = res.json()
-            st.success(f"🩺 Prediction: {data['prediction_label']} — Confidence: {data['confidence_percent']}%")
+            result = data.get("result", "No prediction result")
+            confidence = data.get("confidence", 0)
+            risk = data.get("risk_level", "Unknown")
+            prob = data.get("probabilities", {})
+
+            st.markdown(f"""
+            <div style="
+                background: #ffffffcc;
+                border-radius: 12px;
+                padding: 1.2em;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+                border: 1px solid #dce6ff;
+            ">
+                <h3 style="color:#003366;">🩺 Prediction Result</h3>
+                <p style="font-size:1.2em; font-weight:600;">{result}</p>
+                <p><b>Confidence:</b> {confidence:.1f}%</p>
+                <p><b>Risk Level:</b> {risk}</p>
+                <p><b>Probabilities:</b> 0️⃣ {prob.get('class_0', 0):.3f} | 1️⃣ {prob.get('class_1', 0):.3f}</p>
+                <p style="font-size:0.9em; color:#476C9B;">🕓 {data.get('timestamp', '')}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        elif res.status_code == 404:
+            st.warning("No global model found. Please start training first.")
         else:
             st.error(f"Backend Error: {res.text}")
     except Exception as e:
         st.error(f"Prediction failed: {e}")
 
+
+        
 # ==============================================================
 # 📊 GLOBAL MODEL PROGRESS
 # ==============================================================

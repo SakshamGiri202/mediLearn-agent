@@ -5,24 +5,21 @@ MediLearn Controller (Async FedAvg + Auto-Heal + Config Sync)
 ✅ Waits for /health readiness
 ✅ Keeps agent_config.json updated dynamically
 ✅ Aggregates models & generates explainability plots
-✅ Supports prediction and monitoring
+✅ Supports prediction (merged with friend's predict.py logic)
 """
 
 import logging, json, os, asyncio, time, subprocess, re
 from datetime import datetime
-from typing import List, Any, Optional
+from typing import List
 
 import httpx
 import numpy as np
 from sklearn.datasets import make_classification
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, Form
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 
-import matplotlib
-matplotlib.use("Agg")
-
-# === Import custom SHAP explain function ===
+# === Import friend’s deterministic predictor ===
+from ml_core.predict import predict_disease
 from ml_core.explain_model import generate_explanation
 
 # ---------- Config ----------
@@ -38,7 +35,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
-logging.info("=== MediLearn Controller Initialized (Auto-Heal + Config Sync) ===")
+logging.info("=== MediLearn Controller Initialized (Prediction + Config Sync) ===")
 
 # ---------- FastAPI setup ----------
 app = FastAPI(title=APP_TITLE)
@@ -80,7 +77,6 @@ def load_config():
     return hospitals, cycles
 
 def update_config(new_hospital: str):
-    """Ensure new hospital endpoint is added to config."""
     cfg = load_json(CONFIG_FILE, {"hospitals": [], "cycles": 3})
     hospitals = set(cfg.get("hospitals", []))
     if new_hospital not in hospitals:
@@ -106,22 +102,16 @@ async def ensure_hospitals_running(hospitals: List[str]):
                     print(f"✅ {name} already running at {base_url}")
                     continue
             except Exception:
-                print(f"⚠️  {name} not responding on port {port}, launching...")
+                print(f"⚠️ {name} not responding on port {port}, launching...")
 
             dataset = "heart_disease.csv" if "8001" in port else (
                 "diabetes.csv" if "8002" in port else "stroke.csv"
             )
             script_name = f"backend/hospital_{name}.py"
-            cmd = [
-                "python", script_name,
-                "--name", name,
-                "--dataset", dataset,
-                "--port", port
-            ]
+            cmd = ["python", script_name, "--name", name, "--dataset", dataset, "--port", port]
             subprocess.Popen(cmd)
             print(f"🚀 Started {name} on port {port}")
 
-            # Wait until /health responds
             for attempt in range(10):
                 try:
                     resp = await client.get(health_url)
@@ -151,10 +141,7 @@ def aggregate_model_weights(results):
         avg_coef = np.mean(np.stack(coefs), axis=0)
         avg_intercept = np.mean(np.stack(intercepts), axis=0)
         n_features = int(avg_coef.shape[-1])
-        X_ref, _ = make_classification(
-            n_samples=800, n_features=n_features,
-            n_informative=max(2, n_features // 2), random_state=0
-        )
+        X_ref, _ = make_classification(n_samples=800, n_features=n_features, n_informative=max(2, n_features // 2), random_state=0)
         mean, scale = X_ref.mean(axis=0).tolist(), X_ref.std(axis=0).tolist()
         scale = [s if s > 1e-6 else 1.0 for s in scale]
         return {"weights": [avg_coef.tolist(), avg_intercept.tolist()],
@@ -184,7 +171,7 @@ async def train_all_hospitals(hospitals, global_weights):
                 results.append({"hospital": name, "error": str(e)})
     return results
 
-# ---------- Main simulation ----------
+# ---------- Main Simulation ----------
 def simulate_agent_cycle():
     hospitals, cycles = load_config()
     asyncio.run(ensure_hospitals_running(hospitals))
@@ -237,7 +224,6 @@ def reset():
 
 @app.post("/update_config")
 async def update_config_endpoint(hospital_url: str = Form(...)):
-    """Add new hospital endpoint to config.json."""
     update_config(hospital_url)
     return {"message": f"{hospital_url} added to configuration."}
 
@@ -251,6 +237,20 @@ def privacy_stats():
             utilities.append(float(u))
     avg_u = round(sum(utilities)/len(utilities), 2) if utilities else 0.98
     return {"avg_privacy_utility_score": avg_u, "status": "Active"}
+
+@app.post("/predict")
+def run_prediction(request: Request):
+    payload = asyncio.run(request.json())
+    features = payload.get("features", [])
+    if not features:
+        raise HTTPException(status_code=400, detail="No input features provided.")
+    try:
+        result = predict_disease(features)
+        return result
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Global model not found. Train first.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 def health():
