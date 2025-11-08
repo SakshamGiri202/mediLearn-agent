@@ -1,20 +1,34 @@
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from datetime import datetime
-import random
+import sys, os
 
-app = FastAPI(title="Hospital A API (Simulated)")
+# Add ml_core to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ml_core.train_local import train_on_local_data
 
-@app.get("/train")
-def train_model():
-    """Simulated local training for Hospital A."""
-    accuracy = round(random.uniform(0.80, 0.90), 3)
-    weights = [[round(random.uniform(0.1, 0.9), 2) for _ in range(3)]]
-    return {
+app = FastAPI(title="🏥 Hospital A API (Federated Node)")
+
+DATASET_NAME = "heart_disease.csv"  # Local dataset for Hospital A
+
+
+@app.post("/train")
+async def train_model(request: Request):
+    """Local training endpoint — accepts optional global weights."""
+    body = await request.json()
+    global_weights = body.get("global_weights")  # from controller, may be None first round
+
+    local_weights, accuracy, samples = train_on_local_data(DATASET_NAME, global_weights)
+
+    result = {
         "hospital": "Hospital_A",
-        "accuracy": accuracy,
-        "weights": weights,
+        "accuracy": round(float(accuracy), 3),
+        "samples": int(samples),
+        "weights": local_weights,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
+    return result
+
+
+@app.get("/")
+def home():
+    return {"status": "Hospital A Node active ✅"}
