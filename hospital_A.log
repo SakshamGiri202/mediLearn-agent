@@ -25,3 +25,9 @@ ValueError: too many values to unpack (expected 3)
 2025-11-08 11:13:27,149 [INFO] Hospital A \u2192 Training done. Accuracy=0.667, Samples=120
 2025-11-08 11:13:32,246 [INFO] Hospital A \u2192 Training done. Accuracy=0.9, Samples=120
 2025-11-08 11:13:37,319 [INFO] Hospital A \u2192 Training done. Accuracy=0.8, Samples=120
+2025-11-08 11:24:12,031 [INFO] Hospital A \u2192 Training done. Accuracy=0.9, Samples=120
+2025-11-08 11:24:17,166 [INFO] Hospital A \u2192 Training done. Accuracy=0.767, Samples=120
+2025-11-08 11:24:22,243 [INFO] Hospital A \u2192 Training done. Accuracy=0.9, Samples=120
+2025-11-08 11:40:20,386 [INFO] Hospital A \u2192 Training done. Accuracy=0.7, Samples=120
+2025-11-08 11:40:25,888 [INFO] Hospital A \u2192 Training done. Accuracy=0.767, Samples=120
+2025-11-08 11:40:30,985 [INFO] Hospital A \u2192 Training done. Accuracy=0.733, Samples=120
